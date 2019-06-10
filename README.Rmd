@@ -1,0 +1,167 @@
+---
+title: "Convert GPX files to CSV"
+author: Frew
+date: 2019-05-30
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+Problem: Extract the track points from a bunch of GPX files, and write them into a single mahungous CSV file.
+
+Relative to the current folder:
+
+  - All the GPX files live in the folder `gpx/`.
+    - This folder must contain nothing but `.gpx` files.
+  - CSV versions of each GPX files will be written to the folder `csv/`.
+    - This folder must exist and must be empty.
+
+We do this with 2 scripts. The first script creates the individual CSV files:
+
+```{bash eval=FALSE}
+# gpx2csv
+#
+# This script converts
+# all of the .gpx files in the specified input directory
+# into .csv files in the specified output directory.
+# 
+# Note: The .csv files are give meaningless unique names,
+# on the assumption that they'll be combined into a single CSV file
+# before they're used for anything else.
+#
+# Developed on macOS Mojave,
+# using MacPorts "gdal", "ossp-uuid", and "parallel"
+#
+# Don't bother trying to run this on Windows :-P
+
+    # directory containing the .gpx input files
+    #
+gpx_dir=gpx
+
+    # directory to contain the .csv output files
+    #
+csv_dir=csv
+
+# You shouldn't have to change anything below here
+
+    # ogr2ogr options:
+    # - output format is CSV
+    # - point coordinates will be copied into X and Y columns
+    #
+ogr_opts='-f CSV -lco GEOMETRY=AS_XY'
+
+    # the name of the GPX layer containing the ship track points
+    #
+gpx_layer=track_points
+
+    # current time in seconds since 1970-01-01 00:00:00 UTC
+    #
+start=$(date +%s)
+ 
+    # loop thru the .gpx files in the input directory
+    #
+    # use uuid to construct unique output filenames
+    #
+    # Note: We could just run ogr2ogr inside the loop, but instead we
+    # send the commands to parallel, which runs as many of them at
+    # once as the host computer can handle. This winds up being at
+    # least 2x faster.
+    #
+for gpx in ${gpx_dir}/*; do
+    echo ogr2ogr ${ogr_opts} ${csv_dir}/$(uuid).csv "'${gpx}'" ${gpx_layer}
+done \
+    | parallel -j 0
+    
+    # display run time in seconds
+    #
+echo $(($(date +%s) - start)) seconds
+```
+
+Note: The first time I ran this, I got errors from a few of the GPX files:
+
+```
+gpx/20120605.gpx
+ERROR 1: XML parsing of GPX file failed : junk after document element at line 32174, column 0
+
+gpx/20150318.gpx
+ERROR 1: XML parsing of GPX file failed : junk after document element at line 10025, column 1
+
+gpx/20150320.gpx
+ERROR 1: XML parsing of GPX file failed : not well-formed (invalid token) at line 18390, column 4
+```
+
+I "fixed" these files by hand, deleting everything from the offending line to the end of the file.
+
+The second script extracts only the columns we care about from the CSV files, and merges them into a single CSV file:
+
+```{bash eval=FALSE}
+# csvcat
+#
+# This script merges the .csv files created by gpx2csv.sh
+# into a single .csv file containing only lat, lon, and time columns
+#
+# Developed on macOS Mojave, using MacPort "gawk"
+
+    # folder containing the input .csv files
+    #
+csv_dir=csv
+
+    # output CSV file
+    #
+out_file=all.csv
+
+gawk '
+        # input fields separated by ","
+        #
+    BEGIN { FS = "," }
+
+        # CSV header for the output file
+        #
+    BEGIN { print "lon,lat,time" }
+
+        # skip input CSV header lines
+        #
+    /^X,Y/ { next }
+
+        # skip duplicate input lines
+        #
+    already[$0]++ { next }
+
+        # output the lat, lon, and time columns
+        #
+    { printf("%s,%s,%s\n", $1, $2, $7) }
+
+' ${csv_dir}/*.csv > ${out_file}
+```
+
+Just for shits and giggles, here's how you'd start doing this in R:
+
+```{r}
+library(plotKML)
+
+g = readGPX("gpx/2017-03-31 20.50.14 Day.gpx",
+            metadata = FALSE,
+            bounds = FALSE,
+            waypoints = FALSE,
+            routes = FALSE)
+```
+
+Setting all those layer names to `FALSE` means that only the track points layer will be read.
+
+A GPX file can have multiple tracks in it, and `readGPX` puts each track in a separate data frame. Ick. To collapse these into a single data frame, do this:
+
+```{r}
+track_points = Reduce(rbind, g$tracks[[1]])
+
+head(track_points)
+```
+
+Doing this 500 times is left as an exercise for the R weenie.
+
+But why use R when we can use caveman tech like UNIX commands?
