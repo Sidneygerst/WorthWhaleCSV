@@ -161,6 +161,9 @@ track_points = Reduce(rbind, g$tracks[[1]])
 
 head(track_points)
 
+#write cvs
+write.csv(track_points, file = "GPXtoCSV.csv")
+
 
 ```
 
