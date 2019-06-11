@@ -9,8 +9,12 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r packages}
+
 library(tidyverse)
+library(plotKML)
+library(janitor)
+
 ```
 
 Problem: Extract the track points from a bunch of GPX files, and write them into a single mahungous CSV file.
@@ -143,7 +147,6 @@ We do this with 2 scripts. The first script creates the individual CSV files:
 Just for shits and giggles, here's how you'd start doing this in R:
 
 ```{r}
-library(plotKML)
 
 g = readGPX("G:/Research_Vessel_Tracks/gpx/2017-03-31 20.50.14 Day.gpx",
             metadata = FALSE,
@@ -161,7 +164,7 @@ track_points = Reduce(rbind, g$tracks[[1]])
 
 head(track_points)
 
-#write cvs
+#write csv
 write.csv(track_points, file = "GPXtoCSV.csv")
 
 
@@ -170,3 +173,23 @@ write.csv(track_points, file = "GPXtoCSV.csv")
 Doing this 500 times is left as an exercise for the R weenie.
 
 But why use R when we can use caveman tech like UNIX commands?
+
+```{r whale cluster data}
+
+whaleclusters <- read_csv("ClusterWgps2005-2015.csv")
+
+clean_names(whaleclusters) # Didn't do anything...?
+
+#rename date/time...gpstime column
+
+```
+
+```{r combine whale cluster and vessel tracks}
+
+# Get date/time in common format
+
+# Join (lubridate)
+
+
+```
+
